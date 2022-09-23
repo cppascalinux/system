@@ -20,6 +20,19 @@ test_backtrace(int x)
 }
 
 void
+demo_colors(void)
+{
+	int fg[16]={30,31,32,33,34,35,36,37,90,91,92,93,94,95,96,97};
+	int bg[16]={40,41,42,43,44,45,46,47,100,101,102,103,104,105,106,107};
+	for (int i=0;i<16;i++)
+	{
+		for(int j=0;j<16;j++)
+			cprintf("\x1b[%d;%dmw ",fg[i],bg[j]);
+		cprintf("\x1b[0m\n");
+	}
+}
+
+void
 i386_init(void)
 {
 	extern char edata[], end[];
@@ -37,6 +50,9 @@ i386_init(void)
 
 	// Test the stack backtrace function (lab 1 only)
 	test_backtrace(5);
+
+	// Test color with ANSI escape code
+	demo_colors();
 
 	// Drop into the kernel monitor.
 	while (1)
