@@ -166,7 +166,6 @@ cga_putc(int c)
 {
 	static int esc_seq=0,cga_color=0x0700;
 	static int fg=7,bg=0,cur=0;
-	// if no attribute given, then use the current color
 	if(esc_seq)
 	{
 		char ch=c&0xff;
@@ -217,6 +216,7 @@ cga_putc(int c)
 			return;
 		}
 	}
+	// if no attribute given, then use the current color
 	if (!(c & ~0xFF))
 		c |= cga_color;
 	switch (c & 0xff) {
