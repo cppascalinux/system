@@ -19,13 +19,26 @@ static void boot_aps(void);
 
 
 void
+demo_colors(void)
+{
+	int fg[16]={30,31,32,33,34,35,36,37,90,91,92,93,94,95,96,97};
+	int bg[16]={40,41,42,43,44,45,46,47,100,101,102,103,104,105,106,107};
+	for (int i=0;i<16;i++)
+	{
+		for(int j=0;j<16;j++)
+			cprintf("\x1b[%d;%dmw ",fg[i],bg[j]);
+		cprintf("\x1b[0m\n");
+	}
+}
+
+void
 i386_init(void)
 {
 	// Initialize the console.
 	// Can't call cprintf until after we do this!
 	cons_init();
 
-	cprintf("6828 decimal is %o octal!\n", 6828);
+	cprintf("\n6828 decimal is %o octal!\n", 6828);
 
 	// Lab 2 memory management initialization functions
 	mem_init();

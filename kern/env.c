@@ -119,6 +119,13 @@ env_init(void)
 {
 	// Set up envs array
 	// LAB 3: Your code here.
+	for(int i=0;i<NENV;i++)
+	{
+		envs[i].env_id=0;
+		envs[i].env_status=ENV_FREE;
+		envs[i].env_link=&envs[i+1];
+	}
+	env_free_list=envs;
 
 	// Per-CPU part of the initialization
 	env_init_percpu();
@@ -182,6 +189,9 @@ env_setup_vm(struct Env *e)
 	//    - The functions in kern/pmap.h are handy.
 
 	// LAB 3: Your code here.
+	p->pp_ref++;
+	memcpy(page2kva(p),kern_pgdir,PGSIZE);
+	e->env_pgdir=page2kva(p);
 
 	// UVPT maps the env's own page table read-only.
 	// Permissions: kernel R, user R
@@ -279,6 +289,20 @@ region_alloc(struct Env *e, void *va, size_t len)
 	//   'va' and 'len' values that are not page-aligned.
 	//   You should round va down, and round (va + len) up.
 	//   (Watch out for corner-cases!)
+	void *va_base=ROUNDDOWN(va,PGSIZE);
+	void *va_top=ROUNDUP(va+len,PGSIZE);
+	for(void *p=va_base;p<va_top;p+=PGSIZE)
+	{
+		pte_t *ent=pgdir_walk(e->env_pgdir,p,1);
+		if(!ent)
+			panic("no page entry");
+		struct PageInfo *pi=page_alloc(0);
+		if(!pi)
+			panic("no physical page available");
+		pi->pp_ref++;
+		physaddr_t phy=page2pa(pi);
+		*ent=phy|PTE_P|PTE_U|PTE_W;
+	}
 }
 
 //
@@ -335,11 +359,27 @@ load_icode(struct Env *e, uint8_t *binary)
 	//  What?  (See env_run() and env_pop_tf() below.)
 
 	// LAB 3: Your code here.
+	lcr3(PADDR(e->env_pgdir));
+	struct Elf *elf=binary;
+	if(elf->e_magic!=ELF_MAGIC)
+		panic("Invalid ELF magic number");
+	struct Proghdr *ph,*eph;
+	ph=(struct proghdr*)(binary+elf->e_phoff);
+	eph=ph+elf->e_phnum;
+	for(;ph<eph;ph++)
+	{
+		region_alloc(e,ph->p_va,ph->p_memsz);
+		memcpy(ph->p_va,binary+ph->p_offset,ph->p_filesz);
+		memset(ph->p_va+ph->p_filesz,0,ph->p_memsz-ph->p_filesz);
+	}
+	e->env_tf.tf_eip=elf->e_entry;
 
 	// Now map one page for the program's initial stack
 	// at virtual address USTACKTOP - PGSIZE.
 
 	// LAB 3: Your code here.
+	region_alloc(e,USTACKTOP-PGSIZE,PGSIZE);
+	lcr3(PADDR(kern_pgdir));
 }
 
 //
@@ -353,6 +393,12 @@ void
 env_create(uint8_t *binary, enum EnvType type)
 {
 	// LAB 3: Your code here.
+	struct Env *e;
+	int cd=0;
+	if((cd=env_alloc(&e,curenv))<0)
+		panic("environment allocation failed: %e\n",cd);
+	e->env_type=type;
+	load_icode(e,binary);
 }
 
 //
@@ -483,7 +529,16 @@ env_run(struct Env *e)
 	//	e->env_tf to sensible values.
 
 	// LAB 3: Your code here.
+	if(curenv)
+	{
+		if(curenv->env_status==ENV_RUNNING)
+			curenv->env_status=ENV_RUNNABLE;
+	}
+	curenv=e;
+	e->env_status=ENV_RUNNING;
+	e->env_runs++;
+	lcr3(PADDR(e->env_pgdir));
+	env_pop_tf(&e->env_tf);
 
-	panic("env_run not yet implemented");
 }
 

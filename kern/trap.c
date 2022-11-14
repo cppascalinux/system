@@ -30,7 +30,6 @@ struct Pseudodesc idt_pd = {
 	sizeof(idt) - 1, (uint32_t) idt
 };
 
-
 static const char *trapname(int trapno)
 {
 	static const char * const excnames[] = {
@@ -65,6 +64,25 @@ static const char *trapname(int trapno)
 	return "(unknown trap)";
 }
 
+void N_DIVIDE();
+void N_DEBUG();
+void N_NMI();
+void N_BRKPT();
+void N_OFLOW();
+void N_BOUND();
+void N_ILLOP();
+void N_DEVICE();
+void N_DBLFLT();
+void N_TSS();
+void N_SEGNP();
+void N_STACK();
+void N_GPFLT();
+void N_PGFLT();
+void N_FPERR();
+void N_ALIGN();
+void N_MCHK();
+void N_SIMDERR();
+void N_SYSCALL();
 
 void
 trap_init(void)
@@ -72,6 +90,25 @@ trap_init(void)
 	extern struct Segdesc gdt[];
 
 	// LAB 3: Your code here.
+	SETGATE(idt[0],1,GD_KT,N_DIVIDE,0);
+	SETGATE(idt[1],1,GD_KT,N_DEBUG,0);
+	SETGATE(idt[2],1,GD_KT,N_NMI,0);
+	SETGATE(idt[3],1,GD_KT,N_BRKPT,3);
+	SETGATE(idt[4],1,GD_KT,N_OFLOW,0);
+	SETGATE(idt[5],1,GD_KT,N_BOUND,0);
+	SETGATE(idt[6],1,GD_KT,N_ILLOP,0);
+	SETGATE(idt[7],1,GD_KT,N_DEVICE,0);
+	SETGATE(idt[8],1,GD_KT,N_DBLFLT,0);
+	SETGATE(idt[10],1,GD_KT,N_TSS,0);
+	SETGATE(idt[11],1,GD_KT,N_SEGNP,0);
+	SETGATE(idt[12],1,GD_KT,N_STACK,0);
+	SETGATE(idt[13],1,GD_KT,N_GPFLT,0);
+	SETGATE(idt[14],1,GD_KT,N_PGFLT,0);
+	SETGATE(idt[16],1,GD_KT,N_FPERR,0);
+	SETGATE(idt[17],1,GD_KT,N_ALIGN,0);
+	SETGATE(idt[18],1,GD_KT,N_MCHK,0);
+	SETGATE(idt[19],1,GD_KT,N_SIMDERR,0);
+	SETGATE(idt[48],1,GD_KT,N_SYSCALL,3);
 
 	// Per-CPU setup 
 	trap_init_percpu();
@@ -176,6 +213,22 @@ trap_dispatch(struct Trapframe *tf)
 {
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
+	switch(tf->tf_trapno)
+	{
+		case T_PGFLT:
+			page_fault_handler(tf);
+			return;
+		case T_BRKPT:
+			monitor(tf);
+			return;
+		case T_SYSCALL:
+			int ret=syscall(tf->tf_regs.reg_eax,tf->tf_regs.reg_edx,tf->tf_regs.reg_ecx,
+				tf->tf_regs.reg_ebx,tf->tf_regs.reg_edi,tf->tf_regs.reg_esi);
+			tf->tf_regs.reg_eax=ret;
+			env_run(curenv);
+			return;
+		default:
+	}
 
 	// Handle spurious interrupts
 	// The hardware sometimes raises these because of noise on the
@@ -271,6 +324,11 @@ page_fault_handler(struct Trapframe *tf)
 	// Handle kernel-mode page faults.
 
 	// LAB 3: Your code here.
+	if(!(tf->tf_cs&3))
+	{
+		print_trapframe(tf);
+		panic("kernel page fault");
+	}
 
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.
