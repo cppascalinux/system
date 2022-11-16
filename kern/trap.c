@@ -84,32 +84,45 @@ void N_MCHK();
 void N_SIMDERR();
 void N_SYSCALL();
 
+void N_IRQ_TIMER();
+void N_IRQ_KBD();
+void N_IRQ_SERIAL();
+void N_IRQ_SPURIOUS();
+void N_IRQ_IDE();
+void N_IRQ_ERROR();
+
 void
 trap_init(void)
 {
 	extern struct Segdesc gdt[];
 
 	// LAB 3: Your code here.
-	SETGATE(idt[0],1,GD_KT,N_DIVIDE,0);
-	SETGATE(idt[1],1,GD_KT,N_DEBUG,0);
-	SETGATE(idt[2],1,GD_KT,N_NMI,0);
-	SETGATE(idt[3],1,GD_KT,N_BRKPT,3);
-	SETGATE(idt[4],1,GD_KT,N_OFLOW,0);
-	SETGATE(idt[5],1,GD_KT,N_BOUND,0);
-	SETGATE(idt[6],1,GD_KT,N_ILLOP,0);
-	SETGATE(idt[7],1,GD_KT,N_DEVICE,0);
-	SETGATE(idt[8],1,GD_KT,N_DBLFLT,0);
-	SETGATE(idt[10],1,GD_KT,N_TSS,0);
-	SETGATE(idt[11],1,GD_KT,N_SEGNP,0);
-	SETGATE(idt[12],1,GD_KT,N_STACK,0);
-	SETGATE(idt[13],1,GD_KT,N_GPFLT,0);
-	SETGATE(idt[14],1,GD_KT,N_PGFLT,0);
-	SETGATE(idt[16],1,GD_KT,N_FPERR,0);
-	SETGATE(idt[17],1,GD_KT,N_ALIGN,0);
-	SETGATE(idt[18],1,GD_KT,N_MCHK,0);
-	SETGATE(idt[19],1,GD_KT,N_SIMDERR,0);
-	SETGATE(idt[48],1,GD_KT,N_SYSCALL,3);
+	SETGATE(idt[T_DIVIDE],0,GD_KT,N_DIVIDE,0);
+	SETGATE(idt[T_DEBUG],0,GD_KT,N_DEBUG,0);
+	SETGATE(idt[T_NMI],0,GD_KT,N_NMI,0);
+	SETGATE(idt[T_BRKPT],0,GD_KT,N_BRKPT,3);
+	SETGATE(idt[T_OFLOW],0,GD_KT,N_OFLOW,0);
+	SETGATE(idt[T_BOUND],0,GD_KT,N_BOUND,0);
+	SETGATE(idt[T_ILLOP],0,GD_KT,N_ILLOP,0);
+	SETGATE(idt[T_DEVICE],0,GD_KT,N_DEVICE,0);
+	SETGATE(idt[T_DBLFLT],0,GD_KT,N_DBLFLT,0);
+	SETGATE(idt[T_TSS],0,GD_KT,N_TSS,0);
+	SETGATE(idt[T_SEGNP],0,GD_KT,N_SEGNP,0);
+	SETGATE(idt[T_STACK],0,GD_KT,N_STACK,0);
+	SETGATE(idt[T_GPFLT],0,GD_KT,N_GPFLT,0);
+	SETGATE(idt[T_PGFLT],0,GD_KT,N_PGFLT,0);
+	SETGATE(idt[T_FPERR],0,GD_KT,N_FPERR,0);
+	SETGATE(idt[T_ALIGN],0,GD_KT,N_ALIGN,0);
+	SETGATE(idt[T_MCHK],0,GD_KT,N_MCHK,0);
+	SETGATE(idt[T_SIMDERR],0,GD_KT,N_SIMDERR,0);
+	SETGATE(idt[T_SYSCALL],0,GD_KT,N_SYSCALL,3);
 
+	SETGATE(idt[IRQ_OFFSET+IRQ_TIMER],0,GD_KT,N_IRQ_TIMER,0);
+	SETGATE(idt[IRQ_OFFSET+IRQ_KBD],0,GD_KT,N_IRQ_KBD,0);
+	SETGATE(idt[IRQ_OFFSET+IRQ_SERIAL],0,GD_KT,N_IRQ_SERIAL,0);
+	SETGATE(idt[IRQ_OFFSET+IRQ_SPURIOUS],0,GD_KT,N_IRQ_SPURIOUS,0);
+	SETGATE(idt[IRQ_OFFSET+IRQ_IDE],0,GD_KT,N_IRQ_IDE,0);
+	SETGATE(idt[IRQ_OFFSET+IRQ_ERROR],0,GD_KT,N_IRQ_ERROR,0);
 	// Per-CPU setup 
 	trap_init_percpu();
 }
@@ -145,18 +158,19 @@ trap_init_percpu(void)
 
 	// Setup a TSS so that we get the right stack
 	// when we trap to the kernel.
-	ts.ts_esp0 = KSTACKTOP;
-	ts.ts_ss0 = GD_KD;
-	ts.ts_iomb = sizeof(struct Taskstate);
+	// cprintf("cpu num: %d\n",cpunum());
+	thiscpu->cpu_ts.ts_esp0 = KSTACKTOP-cpunum()*(KSTKSIZE+KSTKGAP);
+	thiscpu->cpu_ts.ts_ss0 = GD_KD;
+	thiscpu->cpu_ts.ts_iomb = sizeof(struct Taskstate);
 
 	// Initialize the TSS slot of the gdt.
-	gdt[GD_TSS0 >> 3] = SEG16(STS_T32A, (uint32_t) (&ts),
+	gdt[(GD_TSS0 >> 3)+cpunum()] = SEG16(STS_T32A, (uint32_t) (&thiscpu->cpu_ts),
 					sizeof(struct Taskstate) - 1, 0);
-	gdt[GD_TSS0 >> 3].sd_s = 0;
+	gdt[(GD_TSS0 >> 3)+cpunum()].sd_s = 0;
 
 	// Load the TSS selector (like other segment selectors, the
 	// bottom three bits are special; we leave them 0)
-	ltr(GD_TSS0);
+	ltr(GD_TSS0+(cpunum()<<3));
 
 	// Load the IDT
 	lidt(&idt_pd);
@@ -227,6 +241,10 @@ trap_dispatch(struct Trapframe *tf)
 			tf->tf_regs.reg_eax=ret;
 			env_run(curenv);
 			return;
+		case IRQ_OFFSET+IRQ_TIMER:
+			lapic_eoi();
+			sched_yield();
+			return;
 		default:
 	}
 
@@ -279,6 +297,7 @@ trap(struct Trapframe *tf)
 		// Acquire the big kernel lock before doing any
 		// serious kernel work.
 		// LAB 4: Your code here.
+		lock_kernel();
 		assert(curenv);
 
 		// Garbage collect if current enviroment is a zombie
@@ -368,6 +387,32 @@ page_fault_handler(struct Trapframe *tf)
 	cprintf("[%08x] user fault va %08x ip %08x\n",
 		curenv->env_id, fault_va, tf->tf_eip);
 	print_trapframe(tf);
-	env_destroy(curenv);
+	if(!curenv->env_pgfault_upcall)
+	{
+		env_destroy(curenv);
+		return;
+	}
+	uintptr_t stb=UXSTACKTOP;
+	if(tf->tf_esp<UXSTACKTOP&&tf->tf_esp>=UXSTACKTOP-PGSIZE)
+		stb=tf->tf_esp-4;
+	stb-=sizeof(struct UTrapframe);
+	user_mem_assert(curenv,stb,sizeof(struct UTrapframe),PTE_U|PTE_W|PTE_P);
+
+	struct UTrapframe utf;
+	utf.utf_esp=tf->tf_esp;
+	utf.utf_eflags=tf->tf_eflags;
+	utf.utf_eip=tf->tf_eip;
+	utf.utf_regs=tf->tf_regs;
+	utf.utf_err=tf->tf_err;
+	utf.utf_fault_va=fault_va;
+
+	lcr3(PADDR(curenv->env_pgdir));
+	memcpy(stb,&utf,sizeof(struct UTrapframe));
+	lcr3(PADDR(kern_pgdir));
+
+
+	curenv->env_tf.tf_eip=curenv->env_pgfault_upcall;
+	curenv->env_tf.tf_esp=stb;
+	env_run(curenv);
 }
 

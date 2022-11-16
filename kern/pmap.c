@@ -207,7 +207,7 @@ mem_init(void)
 	//       overwrite memory.  Known as a "guard page".
 	//     Permissions: kernel RW, user NONE
 	// Your code goes here:
-	boot_map_region(kern_pgdir,KSTACKTOP-KSTKSIZE,KSTKSIZE,PADDR(bootstack),PTE_W|PTE_P);
+	// boot_map_region(kern_pgdir,KSTACKTOP-KSTKSIZE,KSTKSIZE,PADDR(bootstack),PTE_W|PTE_P);
 	// boot_map_region(kern_pgdir,KSTACKTOP-PTSIZE,PTSIZE-KSTKSIZE,KSTKSIZE-PTSIZE,PTE_W|PTE_P);
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE.
@@ -268,7 +268,11 @@ mem_init_mp(void)
 	//     Permissions: kernel RW, user NONE
 	//
 	// LAB 4: Your code here:
-
+	for(int i=0;i<NCPU;i++)
+	{
+		uintptr_t kstacktop_i=KSTACKTOP-i*(KSTKSIZE+KSTKGAP);
+		boot_map_region(kern_pgdir,kstacktop_i-KSTKSIZE,KSTKSIZE,PADDR(percpu_kstacks[i]),PTE_W|PTE_P);
+	}
 }
 
 // --------------------------------------------------------------
@@ -312,7 +316,7 @@ page_init(void)
 	for (i = 0; i < npages; i++) {
 		pages[i].pp_ref=0;
 		physaddr_t paddr=page2pa(&pages[i]);
-		if((i>0&&i<npages_basemem)||paddr>=boot_top)
+		if((i>0&&i<npages_basemem&&paddr!=MPENTRY_PADDR)||paddr>=boot_top)
 		{
 			pages[i].pp_link=page_free_list;
 			page_free_list=&pages[i];
@@ -589,7 +593,11 @@ mmio_map_region(physaddr_t pa, size_t size)
 	// Hint: The staff solution uses boot_map_region.
 	//
 	// Your code here:
-	panic("mmio_map_region not implemented");
+	size_t size_up=ROUNDUP(size,PGSIZE);
+	boot_map_region(kern_pgdir,base,size_up,pa,PTE_W|PTE_P|PTE_PCD|PTE_PWT);
+	uintptr_t p=base;
+	base+=size_up;
+	return (void*)p;
 }
 
 static uintptr_t user_mem_check_addr;
@@ -626,7 +634,7 @@ user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 	for(void *p=low;p<high;p+=PGSIZE)
 	{
 		pte_t *ent=pgdir_walk(env->env_pgdir,p,0);
-		if((*ent&perm)!=perm)
+		if(!ent||(*ent&perm)!=perm)
 		{
 			user_mem_check_addr=va>p?(uintptr_t)va:(uintptr_t)p;
 			return -E_FAULT;

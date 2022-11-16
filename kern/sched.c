@@ -30,6 +30,23 @@ sched_yield(void)
 
 	// LAB 4: Your code here.
 
+	// cprintf("curenv: %p envs: %p\n",curenv,envs);
+	int cur=curenv-envs;
+	if(!curenv)
+		cur=NENV-1;
+	int p=(cur+1)%NENV;
+	while(p!=cur)
+	{
+		// cprintf("p: %d\n",p);
+		if(envs[p].env_status==ENV_RUNNABLE)
+			break;
+		p=(p+1)%NENV;
+	}
+	// cprintf("finished qwq p:%d\n",p);
+	if(p!=cur)
+		env_run(&envs[p]);
+	else if(curenv&&(curenv->env_status==ENV_RUNNING||curenv->env_status==ENV_RUNNABLE))
+			env_run(curenv);
 	// sched_halt never returns
 	sched_halt();
 }
@@ -75,7 +92,7 @@ sched_halt(void)
 		"pushl $0\n"
 		"pushl $0\n"
 		// Uncomment the following line after completing exercise 13
-		//"sti\n"
+		"sti\n"
 		"1:\n"
 		"hlt\n"
 		"jmp 1b\n"
