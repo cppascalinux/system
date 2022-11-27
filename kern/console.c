@@ -49,6 +49,8 @@ delay(void)
 
 static bool serial_exists;
 
+static int color_map[16]={0,4,2,6,1,5,3,7,8,12,10,14,9,13,11,15};
+
 static int
 serial_proc_data(void)
 {
@@ -167,10 +169,61 @@ cga_init(void)
 static void
 cga_putc(int c)
 {
-	// if no attribute given, then use black on white
+	static int esc_seq=0,cga_color=0x0700;
+	static int fg=7,bg=0,cur=0;
+	if(esc_seq)
+	{
+		char ch=c&0xff;
+		if(ch=='[')
+		{
+			cur=1;
+			fg=-1;
+			return;
+		}
+		if(ch==';')
+		{
+			cur=2;
+			bg=-1;
+			return;
+		}
+		if(ch=='m')
+		{
+			cga_color=(color_map[bg]<<12)|(color_map[fg]<<8);
+			esc_seq=0;
+			return;
+		}
+		if(cur==1)
+		{
+			if(fg==-1)
+			{
+				if(ch=='0')
+					fg=7,bg=0;
+				else if(ch=='3')
+					fg=0;
+				else if(ch=='9')
+					fg=8;
+			}
+			else
+				fg+=ch-'0';
+			return;
+		}
+		if(cur==2)
+		{
+			if(bg==-1)
+			{
+				if(ch=='4')
+					bg=0;
+				else if(ch=='1')
+					bg=8;
+			}
+			else
+				bg+=ch-'0';
+			return;
+		}
+	}
+	// if no attribute given, then use the current color
 	if (!(c & ~0xFF))
-		c |= 0x0700;
-
+		c |= cga_color;
 	switch (c & 0xff) {
 	case '\b':
 		if (crt_pos > 0) {
@@ -190,6 +243,10 @@ cga_putc(int c)
 		cons_putc(' ');
 		cons_putc(' ');
 		cons_putc(' ');
+		break;
+	case '\x1b':
+		esc_seq=1;
+		cur=0;
 		break;
 	default:
 		crt_buf[crt_pos++] = c;		/* write the character */
