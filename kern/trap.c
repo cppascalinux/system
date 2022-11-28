@@ -245,6 +245,12 @@ trap_dispatch(struct Trapframe *tf)
 			lapic_eoi();
 			sched_yield();
 			return;
+		case IRQ_OFFSET+IRQ_KBD:
+			kbd_intr();
+			return;
+		case IRQ_OFFSET+IRQ_SERIAL:
+			serial_intr();
+			return;
 		default:
 	}
 
@@ -387,9 +393,9 @@ page_fault_handler(struct Trapframe *tf)
 	// LAB 4: Your code here.
 
 	// Destroy the environment that caused the fault.
-	cprintf("[%08x] user fault va %08x ip %08x\n",
-		curenv->env_id, fault_va, tf->tf_eip);
-	print_trapframe(tf);
+	// cprintf("[%08x] user fault va %08x ip %08x\n",
+	// 	curenv->env_id, fault_va, tf->tf_eip);
+	// print_trapframe(tf);
 	if(!curenv->env_pgfault_upcall)
 	{
 		env_destroy(curenv);

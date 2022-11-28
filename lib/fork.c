@@ -87,12 +87,18 @@ duppage(envid_t envid, unsigned pn)
 	if(!(*pte&PTE_U))
 		panic("page cannot be accessed by user");
 	int perm=*pte&PTE_SYSCALL;
+	int ret;
+	if(perm&PTE_SHARE)
+	{
+		if((ret=sys_page_map(0,addr,envid,addr,perm))<0)
+			panic("sys_page_map failed %e",ret);
+		return 0;
+	}
 	if(perm&PTE_W)
 	{
 		perm^=PTE_W;
 		perm|=PTE_COW;
 	}
-	int ret;
 	if((ret=sys_page_map(0,addr,envid,addr,perm))<0)
 		panic("sys_page_map failed %e",ret);
 	if(perm&PTE_COW)

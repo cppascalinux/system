@@ -3,6 +3,9 @@
 
 #include "fs.h"
 
+struct Super *super;		// superblock
+uint32_t *bitmap;		// bitmap blocks mapped in memory
+
 // --------------------------------------------------------------
 // Super block
 // --------------------------------------------------------------
@@ -62,7 +65,24 @@ alloc_block(void)
 	// super->s_nblocks blocks in the disk altogether.
 
 	// LAB 5: Your code here.
-	panic("alloc_block not implemented");
+	uint32_t total_blk=super->s_nblocks;
+	for(int i=0;i*32<total_blk;i++)
+		if(bitmap[i])
+		{
+			uint32_t x=bitmap[i];
+			int pos=-1;
+			for(int j=0;j<32;j++)
+				if(x>>j&1)
+				{
+					pos=j;
+					break;
+				}
+			if(pos==-1)
+				continue;
+			bitmap[i]^=1U<<pos;
+			flush_block(bitmap+i);
+			return i*32+pos;
+		}
 	return -E_NO_DISK;
 }
 
@@ -135,7 +155,26 @@ static int
 file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool alloc)
 {
        // LAB 5: Your code here.
-       panic("file_block_walk not implemented");
+	if(filebno>=NDIRECT+NINDIRECT)
+		return -E_INVAL;
+	if(filebno<NDIRECT)
+	{
+		if(ppdiskbno)
+			*ppdiskbno=f->f_direct+filebno;
+		return 0;
+	}
+	if(!f->f_indirect)
+	{
+		if(!alloc)
+			return -E_NOT_FOUND;
+		int r=alloc_block();
+		if(r<0)
+			return r;
+		f->f_indirect=r;
+		memset(diskaddr(r),0,BLKSIZE);
+	}
+	if(ppdiskbno)
+		*ppdiskbno=(uint32_t*)diskaddr(f->f_indirect)+(filebno-NDIRECT);
 }
 
 // Set *blk to the address in memory where the filebno'th
@@ -150,7 +189,19 @@ int
 file_get_block(struct File *f, uint32_t filebno, char **blk)
 {
        // LAB 5: Your code here.
-       panic("file_get_block not implemented");
+	uint32_t *ppdiskbno;
+	int r=file_block_walk(f,filebno,&ppdiskbno,1);
+	if(r<0)
+		return r;
+	if(!*ppdiskbno)
+	{
+		if((r=alloc_block())<0)
+			return r;
+		*ppdiskbno=r;
+	}
+	if(blk)
+		*blk=diskaddr(*ppdiskbno);
+	return 0;
 }
 
 // Try to find a file named "name" in dir.  If so, set *file to it.

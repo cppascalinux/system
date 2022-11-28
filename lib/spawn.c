@@ -302,6 +302,27 @@ static int
 copy_shared_pages(envid_t child)
 {
 	// LAB 5: Your code here.
+	for(size_t i=0;i*PGSIZE<UTOP;i++)
+	{
+		uintptr_t addr=i*PGSIZE;
+		pde_t *pde=PGADDR(0x3BD,0x3BD,PDX(addr)<<2);
+		if(!(*pde&PTE_P))
+			continue;
+		if(!(*pde&PTE_U))
+			panic("page table cannot be accessed by user");
+		pte_t *pte=PGADDR(0x3BD,PDX(addr),PTX(addr)<<2);
+		if(!(*pte&PTE_P))
+			continue;
+		if(!(*pte&PTE_U))
+			panic("page cannot be accessed by user");
+		int perm=*pte&PTE_SYSCALL;
+		int ret;
+		if(perm&PTE_SHARE)
+		{
+			if((ret=sys_page_map(0,addr,child,addr,perm))<0)
+				panic("sys_page_map failed %e",ret);
+		}
+	}
 	return 0;
 }
 

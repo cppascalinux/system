@@ -110,7 +110,7 @@ boot_alloc(uint32_t n)
 	static tot_page;
 	result=nextfree;
 	nextfree+=ROUNDUP(n,PGSIZE);
-	if(nextfree>KERNBASE+PTSIZE)
+	if(nextfree>KERNBASE+2*PTSIZE)
 		panic("boot_alloc: Too much memory allocated\n");
 	return result;
 }
